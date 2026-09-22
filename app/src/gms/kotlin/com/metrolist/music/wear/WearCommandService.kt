@@ -29,6 +29,7 @@ import com.metrolist.music.playback.queues.YouTubeQueue
 import com.metrolist.music.utils.dataStore
 import com.metrolist.wear.protocol.AccountSync
 import com.metrolist.wear.protocol.Command
+import com.metrolist.wear.protocol.LyricsResponse
 import com.metrolist.wear.protocol.Queue
 import com.metrolist.wear.protocol.QueueItem
 import com.metrolist.wear.protocol.WearProtocol
@@ -68,6 +69,7 @@ class WearCommandService : WearableListenerService() {
         return when (path) {
             WearProtocol.PATH_QUEUE -> scope.async { queue(context) }.asTask()
             WearProtocol.PATH_ACCOUNT -> scope.async { account(context) }.asTask()
+            WearProtocol.PATH_LYRICS -> scope.async { lyrics(request.decodeToString()) }.asTask()
             else -> null
         }
     }
@@ -163,6 +165,13 @@ class WearCommandService : WearableListenerService() {
                     accountEmail = prefs[AccountEmailKey],
                 )
             return WearProtocol.json.encodeToString(AccountSync.serializer(), account).encodeToByteArray()
+        }
+
+        private suspend fun lyrics(mediaId: String): ByteArray {
+            val lyrics = runCatching { WearSync.active?.lyrics(mediaId) }.getOrNull()
+            return WearProtocol.json
+                .encodeToString(LyricsResponse.serializer(), LyricsResponse(mediaId, lyrics))
+                .encodeToByteArray()
         }
 
         private suspend fun controller(context: Context): MediaController =

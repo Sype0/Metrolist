@@ -290,8 +290,9 @@ fun VolumeScreen(source: PlayerSource) {
     val state by source.state.collectAsState()
     val fraction = if (state.maxVolume > 0) state.volume.toFloat() / state.maxVolume else 0f
     ScreenScaffold {
-        LevelIndicator(value = { fraction })
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            // Wear M3 draws the level as an arc on the left edge; it has to be aligned there explicitly.
+            LevelIndicator(value = { fraction }, modifier = Modifier.align(Alignment.CenterStart))
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,

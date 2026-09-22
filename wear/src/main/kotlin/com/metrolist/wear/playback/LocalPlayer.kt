@@ -15,6 +15,7 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.metrolist.innertube.YouTube
 import com.metrolist.wear.R
+import com.metrolist.wear.lyrics.Lyrics
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -179,6 +180,12 @@ class LocalPlayer(
                 isCurrent = index == current,
             )
         }
+    }
+
+    override suspend fun lyrics(): String? {
+        val state = _state.value
+        val id = state.mediaId ?: return null
+        return Lyrics.fetch(id, state.title.orEmpty(), state.artist.orEmpty(), (state.durationMs / 1000).toInt())
     }
 
     override fun skipTo(index: Int) =

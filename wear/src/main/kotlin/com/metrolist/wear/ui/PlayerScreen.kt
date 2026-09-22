@@ -23,7 +23,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -61,17 +60,18 @@ fun PlayerScreen(
     isPhone: Boolean,
     onQueue: () -> Unit,
     onVolume: () -> Unit,
+    onLyrics: () -> Unit,
 ) {
     val state by source.state.collectAsState()
-    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(state.isPlaying) {
-        while (state.isPlaying) {
-            now = System.currentTimeMillis()
-            delay(1_000)
+    // The indicator reads this state from its draw lambda, so ticking it only redraws the ring.
+    val progress = remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(state) {
+        while (true) {
+            progress.floatValue = state.progress
+            if (!state.isPlaying) break
+            delay(PROGRESS_TICK_MS)
         }
     }
-    val progress =
-        if (state.durationMs > 0) (state.positionAt(now).toFloat() / state.durationMs).coerceIn(0f, 1f) else 0f
 
     // Crown/bezel adjusts volume, as on the stock Wear OS media controls.
     val focusRequester = remember { FocusRequester() }
@@ -112,7 +112,7 @@ fun PlayerScreen(
             )
 
             CircularProgressIndicator(
-                progress = { progress },
+                progress = { progress.floatValue },
                 modifier = Modifier.fillMaxSize().padding(3.dp),
                 strokeWidth = 5.dp,
             )
@@ -206,6 +206,9 @@ fun PlayerScreen(
                     IconButton(onClick = onVolume, modifier = Modifier.size(SMALL_BUTTON)) {
                         Icon(painterResource(R.drawable.volume_up), stringResource(R.string.volume))
                     }
+                    IconButton(onClick = onLyrics, enabled = state.active, modifier = Modifier.size(SMALL_BUTTON)) {
+                        Icon(painterResource(R.drawable.lyrics), stringResource(R.string.lyrics))
+                    }
                     IconButton(onClick = onQueue, modifier = Modifier.size(SMALL_BUTTON)) {
                         Icon(painterResource(R.drawable.queue_music), stringResource(R.string.queue))
                     }
@@ -216,4 +219,5 @@ fun PlayerScreen(
 }
 
 private const val ROTARY_STEP_PX = 48f
+private const val PROGRESS_TICK_MS = 500L
 private val SMALL_BUTTON = 40.dp

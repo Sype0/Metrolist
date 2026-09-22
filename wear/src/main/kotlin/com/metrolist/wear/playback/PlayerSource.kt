@@ -70,4 +70,7 @@ interface PlayerSource {
     suspend fun queue(): List<QueueEntry>
 
     fun skipTo(index: Int)
+
+    /** Raw LRC or plain lyrics for the current item, or null when none were found. */
+    suspend fun lyrics(): String?
 }

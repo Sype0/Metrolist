@@ -32,6 +32,7 @@ import com.metrolist.innertube.YouTube
 import com.metrolist.wear.playback.LocalPlayer
 import com.metrolist.wear.ui.BrowseActions
 import com.metrolist.wear.ui.HomeScreen
+import com.metrolist.wear.ui.LyricsScreen
 import com.metrolist.wear.ui.MetrolistWearTheme
 import com.metrolist.wear.ui.PlayerScreen
 import com.metrolist.wear.ui.PlaylistsScreen
@@ -147,16 +148,19 @@ class MainActivity : ComponentActivity() {
                     )
                 }
                 composable(ROUTE_PLAYER_LOCAL) {
-                    PlayerScreen(localPlayer, isPhone = false, onQueue = { navController.navigate("queue/local") }, onVolume = { navController.navigate("volume/local") })
+                    PlayerScreen(localPlayer, isPhone = false, onQueue = { navController.navigate("queue/local") }, onVolume = { navController.navigate("volume/local") }, onLyrics = { navController.navigate("lyrics/local") })
                 }
                 composable(ROUTE_PLAYER_PHONE) {
-                    PlayerScreen(app.phone, isPhone = true, onQueue = { navController.navigate("queue/phone") }, onVolume = { navController.navigate("volume/phone") })
+                    PlayerScreen(app.phone, isPhone = true, onQueue = { navController.navigate("queue/phone") }, onVolume = { navController.navigate("volume/phone") }, onLyrics = { navController.navigate("lyrics/phone") })
                 }
                 composable("queue/{source}") { entry ->
                     QueueScreen(if (entry.isPhone()) app.phone else localPlayer)
                 }
                 composable("volume/{source}") { entry ->
                     VolumeScreen(if (entry.isPhone()) app.phone else localPlayer)
+                }
+                composable("lyrics/{source}") { entry ->
+                    LyricsScreen(if (entry.isPhone()) app.phone else localPlayer)
                 }
                 composable(ROUTE_SEARCH) {
                     var query by remember { mutableStateOf<String?>(null) }

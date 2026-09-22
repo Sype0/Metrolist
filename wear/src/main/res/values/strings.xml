@@ -47,4 +47,6 @@
     <string name="channel_phone_remote">Phone playback</string>
     <string name="radio">Radio</string>
     <string name="error_no_output">Connect Bluetooth headphones or allow the watch speaker in Settings</string>
+    <string name="lyrics">Lyrics</string>
+    <string name="lyrics_not_found">No lyrics found</string>
 </resources>

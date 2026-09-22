@@ -47,4 +47,6 @@
     <string name="channel_phone_remote">Telefonda çalma</string>
     <string name="radio">Radyo</string>
     <string name="error_no_output">Bluetooth kulaklık bağla ya da Ayarlar\'dan saat hoparlörüne izin ver</string>
+    <string name="lyrics">Şarkı sözleri</string>
+    <string name="lyrics_not_found">Şarkı sözü bulunamadı</string>
 </resources>

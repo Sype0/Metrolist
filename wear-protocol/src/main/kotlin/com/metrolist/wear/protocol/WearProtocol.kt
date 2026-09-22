@@ -34,6 +34,9 @@ object WearProtocol {
     /** Watch → phone RPC returning [AccountSync]. */
     const val PATH_ACCOUNT = "/metrolist/account"
 
+    /** Watch → phone RPC; the request payload is the media id, the response is [LyricsResponse]. */
+    const val PATH_LYRICS = "/metrolist/lyrics"
+
     val json =
         Json {
             ignoreUnknownKeys = true
@@ -139,6 +142,13 @@ data class AccountSync(
     val dataSyncId: String? = null,
     val accountName: String? = null,
     val accountEmail: String? = null,
+)
+
+@Serializable
+data class LyricsResponse(
+    val mediaId: String,
+    /** LRC (synced) or plain text, exactly as the phone app stores it; null when none was found. */
+    val lyrics: String? = null,
 )
 
 fun Command.encode(): ByteArray = WearProtocol.json.encodeToString(Command.serializer(), this).encodeToByteArray()

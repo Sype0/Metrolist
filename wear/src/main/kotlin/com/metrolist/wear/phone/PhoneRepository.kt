@@ -16,11 +16,13 @@ import com.google.android.gms.wearable.DataMapItem
 import com.google.android.gms.wearable.Node
 import com.google.android.gms.wearable.PutDataRequest
 import com.google.android.gms.wearable.Wearable
+import com.metrolist.wear.lyrics.Lyrics
 import com.metrolist.wear.playback.PlayerSource
 import com.metrolist.wear.playback.PlayerState
 import com.metrolist.wear.playback.QueueEntry
 import com.metrolist.wear.protocol.AccountSync
 import com.metrolist.wear.protocol.Command
+import com.metrolist.wear.protocol.LyricsResponse
 import com.metrolist.wear.protocol.NowPlaying
 import com.metrolist.wear.protocol.Queue
 import com.metrolist.wear.protocol.WearProtocol
@@ -119,9 +121,12 @@ class PhoneRepository(
         }
     }
 
-    private suspend fun request(path: String): ByteArray? {
+    private suspend fun request(
+        path: String,
+        payload: ByteArray = ByteArray(0),
+    ): ByteArray? {
         val node = phoneNodes().firstOrNull() ?: return null
-        return runCatching { messageClient.sendRequest(node.id, path, ByteArray(0)).await() }
+        return runCatching { messageClient.sendRequest(node.id, path, payload).await() }
             .onFailure { Timber.w(it, "Request $path failed") }
             .getOrNull()
     }
@@ -180,6 +185,17 @@ class PhoneRepository(
     }
 
     override fun skipTo(index: Int) = send(Command.SkipToQueueItem(index))
+
+    /** Prefers the phone's lyrics (same provider order and cache as the phone app), then looks them up on the watch. */
+    override suspend fun lyrics(): String? {
+        val state = _state.value
+        val id = state.mediaId ?: return null
+        val fromPhone =
+            request(WearProtocol.PATH_LYRICS, id.encodeToByteArray())?.let {
+                runCatching { WearProtocol.json.decodeFromString(LyricsResponse.serializer(), it.decodeToString()) }.getOrNull()
+            }
+        return fromPhone?.lyrics ?: Lyrics.fetch(id, state.title.orEmpty(), state.artist.orEmpty(), (state.durationMs / 1000).toInt())
+    }
 
     fun playOnPhone(videoId: String) = send(Command.PlaySong(videoId))
 

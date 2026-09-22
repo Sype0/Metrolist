@@ -20,6 +20,7 @@ import com.google.android.gms.wearable.CapabilityClient
 import com.google.android.gms.wearable.CapabilityInfo
 import com.google.android.gms.wearable.PutDataMapRequest
 import com.google.android.gms.wearable.Wearable
+import com.metrolist.music.db.entities.LyricsEntity
 import com.metrolist.music.playback.MusicService
 import com.metrolist.music.ui.utils.resize
 import com.metrolist.wear.protocol.NowPlaying
@@ -32,6 +33,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -134,6 +136,21 @@ class WearSync(
                 delay(delayMs)
                 publish()
             }
+    }
+
+    /** Lyrics the phone app already has (cached in its database) or fetches with the user's provider order. */
+    suspend fun lyrics(mediaId: String): String? {
+        service.database
+            .lyrics(mediaId)
+            .first()
+            ?.lyrics
+            ?.takeIf { it != LyricsEntity.LYRICS_NOT_FOUND }
+            ?.let { return it }
+        val metadata = service.currentMediaMetadata.value?.takeIf { it.id == mediaId } ?: return null
+        return service.lyricsHelper
+            .getLyrics(metadata)
+            .lyrics
+            .takeIf { it != LyricsEntity.LYRICS_NOT_FOUND }
     }
 
     private suspend fun publish() {
