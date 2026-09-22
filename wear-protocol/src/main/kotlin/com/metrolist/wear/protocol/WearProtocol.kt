@@ -149,6 +149,29 @@ data class LyricsResponse(
     val mediaId: String,
     /** LRC (synced) or plain text, exactly as the phone app stores it; null when none was found. */
     val lyrics: String? = null,
+    /**
+     * [lyrics] parsed by the phone app's own parser, which understands every line- and word-synced
+     * format its providers return. Null for unsynced lyrics.
+     */
+    val lines: List<LyricsLine>? = null,
+)
+
+@Serializable
+data class LyricsLine(
+    val timeMs: Long,
+    val text: String,
+    /** Word-by-word timing, when the provider supplies it. */
+    val words: List<LyricsWord>? = null,
+    /** Background vocals, rendered smaller. */
+    val background: Boolean = false,
+)
+
+@Serializable
+data class LyricsWord(
+    val text: String,
+    val startMs: Long,
+    val endMs: Long,
+    val trailingSpace: Boolean = true,
 )
 
 fun Command.encode(): ByteArray = WearProtocol.json.encodeToString(Command.serializer(), this).encodeToByteArray()

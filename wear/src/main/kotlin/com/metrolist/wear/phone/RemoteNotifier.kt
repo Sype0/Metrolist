@@ -16,10 +16,10 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.wear.ongoing.OngoingActivity
+import androidx.wear.ongoing.Status
 import com.metrolist.wear.MainActivity
 import com.metrolist.wear.R
 import com.metrolist.wear.WearApp
-import com.metrolist.wear.playback.OngoingMediaNotificationProvider
 import com.metrolist.wear.playback.PlaybackService
 import com.metrolist.wear.playback.PlayerState
 
@@ -77,12 +77,23 @@ object RemoteNotifier {
             .setTouchIntent(openRemote)
             .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
             .setTitle(title)
-            .setStatus(OngoingMediaNotificationProvider.ongoingStatus(title, state.artist))
+            .setStatus(ongoingStatus(title, state.artist))
             .build()
             .apply(context)
 
         NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, builder.build())
     }
+
+    private fun ongoingStatus(
+        title: CharSequence,
+        artist: CharSequence?,
+    ): Status =
+        Status
+            .Builder()
+            .addTemplate(if (artist.isNullOrBlank()) "#title#" else "#title# • #artist#")
+            .addPart("title", Status.TextPart(title.toString()))
+            .addPart("artist", Status.TextPart(artist?.toString().orEmpty()))
+            .build()
 
     private fun action(
         context: Context,

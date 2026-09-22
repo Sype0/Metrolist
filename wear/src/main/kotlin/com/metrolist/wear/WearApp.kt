@@ -7,6 +7,7 @@ package com.metrolist.wear
 
 import android.app.Application
 import com.metrolist.innertube.YouTube
+import com.metrolist.innertube.models.AccountInfo
 import com.metrolist.innertube.models.YouTubeLocale
 import com.metrolist.wear.phone.PhoneRepository
 import com.metrolist.wear.youtube.StreamResolver
@@ -14,6 +15,9 @@ import com.metrolist.wear.protocol.AccountSync
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.util.Locale
@@ -26,6 +30,11 @@ class WearApp : Application() {
 
     lateinit var phone: PhoneRepository
         private set
+
+    private val _accountInfo = MutableStateFlow<AccountInfo?>(null)
+
+    /** Name and avatar of the signed-in YouTube Music account, fetched on the watch after sign-in. */
+    val accountInfo: StateFlow<AccountInfo?> = _accountInfo.asStateFlow()
 
     override fun onCreate() {
         super.onCreate()
@@ -63,6 +72,12 @@ class WearApp : Application() {
                     ?: it.substringAfter("||")
             }
         YouTube.cookie = account?.cookie
+        _accountInfo.value = null
+        if (account?.cookie != null) {
+            scope.launch(Dispatchers.IO) {
+                YouTube.accountInfo().onSuccess { _accountInfo.value = it }
+            }
+        }
     }
 
     companion object {

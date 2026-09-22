@@ -114,9 +114,9 @@ class PlaybackService : MediaSessionService() {
                 .setSessionActivity(openApp)
                 .setCallback(sessionCallback)
                 .build()
-        setMediaNotificationProvider(OngoingMediaNotificationProvider(this))
         active.value = true
-        // Only one ongoing activity at a time: the watch player replaces the phone remote chip.
+        // Wear OS derives the ongoing activity (watch face, Now Bar) from Media3's media notification,
+        // so the watch player needs none of its own; only the phone-remote chip has to make way.
         RemoteNotifier.update(this, WearApp.from(this).phone.state.value)
     }
 

@@ -7,6 +7,7 @@ package com.metrolist.wear.lyrics
 
 import com.metrolist.innertube.YouTube
 import com.metrolist.innertube.models.WatchEndpoint
+import com.metrolist.wear.protocol.LyricsLine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -21,13 +22,34 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import kotlin.math.abs
 
+data class LyricWord(
+    val text: String,
+    val startMs: Long,
+    val endMs: Long,
+    val trailingSpace: Boolean,
+)
+
 data class LyricLine(
     /** Start time, or null for unsynced lyrics. */
     val timeMs: Long?,
     val text: String,
+    /** Word-by-word timing (karaoke style), when the source provides it. */
+    val words: List<LyricWord>? = null,
+    val background: Boolean = false,
 )
 
 object Lyrics {
+    /** Lines already parsed by the phone app, which knows every word-synced format its providers use. */
+    fun fromPhone(lines: List<LyricsLine>): List<LyricLine> =
+        lines.map { line ->
+            LyricLine(
+                timeMs = line.timeMs,
+                text = line.text,
+                words = line.words?.map { LyricWord(it.text, it.startMs, it.endMs, it.trailingSpace) }?.takeIf { it.isNotEmpty() },
+                background = line.background,
+            )
+        }
+
     private val lineTag = Regex("""\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?]""")
 
     /** Word-level timing (`<00:01.23>`) and speaker tags used by some of the phone app's providers. */

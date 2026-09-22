@@ -16,6 +16,7 @@ import com.google.android.gms.wearable.DataMapItem
 import com.google.android.gms.wearable.Node
 import com.google.android.gms.wearable.PutDataRequest
 import com.google.android.gms.wearable.Wearable
+import com.metrolist.wear.lyrics.LyricLine
 import com.metrolist.wear.lyrics.Lyrics
 import com.metrolist.wear.playback.PlayerSource
 import com.metrolist.wear.playback.PlayerState
@@ -186,15 +187,17 @@ class PhoneRepository(
 
     override fun skipTo(index: Int) = send(Command.SkipToQueueItem(index))
 
-    /** Prefers the phone's lyrics (same provider order and cache as the phone app), then looks them up on the watch. */
-    override suspend fun lyrics(): String? {
+    /** Prefers the phone's lyrics (same cache, provider order and parser as the phone app), then looks them up on the watch. */
+    override suspend fun lyrics(): List<LyricLine> {
         val state = _state.value
-        val id = state.mediaId ?: return null
+        val id = state.mediaId ?: return emptyList()
         val fromPhone =
             request(WearProtocol.PATH_LYRICS, id.encodeToByteArray())?.let {
                 runCatching { WearProtocol.json.decodeFromString(LyricsResponse.serializer(), it.decodeToString()) }.getOrNull()
             }
-        return fromPhone?.lyrics ?: Lyrics.fetch(id, state.title.orEmpty(), state.artist.orEmpty(), (state.durationMs / 1000).toInt())
+        fromPhone?.lines?.let { return Lyrics.fromPhone(it) }
+        val raw = fromPhone?.lyrics ?: Lyrics.fetch(id, state.title.orEmpty(), state.artist.orEmpty(), (state.durationMs / 1000).toInt())
+        return raw?.let(Lyrics::parse).orEmpty()
     }
 
     fun playOnPhone(videoId: String) = send(Command.PlaySong(videoId))

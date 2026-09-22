@@ -33,6 +33,7 @@ import androidx.wear.compose.material3.ScreenScaffold
 import androidx.wear.compose.material3.SwitchButton
 import androidx.wear.compose.material3.Text
 import com.metrolist.innertube.YouTube
+import com.metrolist.innertube.models.AccountInfo
 import com.metrolist.wear.R
 import com.metrolist.wear.playback.PlayerState
 import kotlinx.coroutines.launch
@@ -43,6 +44,7 @@ fun HomeScreen(
     phoneState: PlayerState,
     phoneConnected: Boolean,
     signedIn: Boolean,
+    accountInfo: AccountInfo?,
     onLocalPlayer: () -> Unit,
     onPhoneRemote: () -> Unit,
     onSearch: () -> Unit,
@@ -62,6 +64,17 @@ fun HomeScreen(
     ) { padding ->
         ScalingLazyColumn(state = listState, contentPadding = padding, modifier = Modifier.fillMaxWidth()) {
             item { ListHeader { Text(stringResource(R.string.app_name)) } }
+            accountInfo?.let { info ->
+                item {
+                    FilledTonalButton(
+                        onClick = onSettings,
+                        modifier = Modifier.fillMaxWidth(),
+                        icon = { Artwork(info.thumbnailUrl, circle = true) },
+                        secondaryLabel = (info.channelHandle ?: info.email)?.let { { Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis) } },
+                        label = { Text(info.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    )
+                }
+            }
 
             if (localState.active) {
                 item {
@@ -111,6 +124,7 @@ fun SettingsScreen(onAccountChanged: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val phoneConnected by app.phone.connected.collectAsState()
+    val accountInfo by app.accountInfo.collectAsState()
     var account by remember { mutableStateOf(app.prefs.account) }
     var highQuality by remember { mutableStateOf(app.prefs.highQualityAudio) }
     var allowSpeaker by remember { mutableStateOf(app.prefs.allowSpeaker) }
@@ -125,10 +139,21 @@ fun SettingsScreen(onAccountChanged: () -> Unit) {
             item { ListHeader { Text(stringResource(R.string.settings)) } }
             item { ListHeader { Text(stringResource(R.string.account)) } }
             item {
-                CenteredText(
-                    account?.let { stringResource(R.string.signed_in_as, it.accountName ?: it.accountEmail ?: "YouTube Music") }
-                        ?: stringResource(R.string.not_signed_in),
-                )
+                val info = accountInfo
+                if (account != null && info != null) {
+                    FilledTonalButton(
+                        onClick = {},
+                        modifier = Modifier.fillMaxWidth(),
+                        icon = { Artwork(info.thumbnailUrl, circle = true) },
+                        secondaryLabel = (info.channelHandle ?: info.email)?.let { { Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis) } },
+                        label = { Text(info.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    )
+                } else {
+                    CenteredText(
+                        account?.let { stringResource(R.string.signed_in_as, it.accountName ?: it.accountEmail ?: "YouTube Music") }
+                            ?: stringResource(R.string.not_signed_in),
+                    )
+                }
             }
             item {
                 FilledTonalButton(

@@ -24,12 +24,15 @@ import com.metrolist.music.constants.DataSyncIdKey
 import com.metrolist.music.constants.InnerTubeCookieKey
 import com.metrolist.music.constants.MediaSessionConstants
 import com.metrolist.music.constants.VisitorDataKey
+import com.metrolist.music.lyrics.LyricsUtils
 import com.metrolist.music.playback.MusicService
 import com.metrolist.music.playback.queues.YouTubeQueue
 import com.metrolist.music.utils.dataStore
 import com.metrolist.wear.protocol.AccountSync
 import com.metrolist.wear.protocol.Command
+import com.metrolist.wear.protocol.LyricsLine
 import com.metrolist.wear.protocol.LyricsResponse
+import com.metrolist.wear.protocol.LyricsWord
 import com.metrolist.wear.protocol.Queue
 import com.metrolist.wear.protocol.QueueItem
 import com.metrolist.wear.protocol.WearProtocol
@@ -169,8 +172,24 @@ class WearCommandService : WearableListenerService() {
 
         private suspend fun lyrics(mediaId: String): ByteArray {
             val lyrics = runCatching { WearSync.active?.lyrics(mediaId) }.getOrNull()
+            val lines =
+                lyrics
+                    ?.takeIf { LyricsUtils.isLineSynced(it) || LyricsUtils.isWordSynced(it) }
+                    ?.let { raw -> runCatching { LyricsUtils.parseLyrics(raw) }.getOrNull() }
+                    ?.filter { it.text.isNotBlank() || it.words?.isNotEmpty() == true }
+                    ?.map { entry ->
+                        LyricsLine(
+                            timeMs = entry.time,
+                            text = entry.text,
+                            words =
+                                entry.words?.map {
+                                    LyricsWord(it.text, (it.startTime * 1000).toLong(), (it.endTime * 1000).toLong(), it.hasTrailingSpace)
+                                },
+                            background = entry.isBackground,
+                        )
+                    }?.takeIf { it.isNotEmpty() }
             return WearProtocol.json
-                .encodeToString(LyricsResponse.serializer(), LyricsResponse(mediaId, lyrics))
+                .encodeToString(LyricsResponse.serializer(), LyricsResponse(mediaId, lyrics, lines))
                 .encodeToByteArray()
         }
 

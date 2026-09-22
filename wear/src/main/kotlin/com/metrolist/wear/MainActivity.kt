@@ -101,6 +101,7 @@ class MainActivity : ComponentActivity() {
         val localState by localPlayer.state.collectAsState()
         val phoneState by app.phone.state.collectAsState()
         val phoneConnected by app.phone.connected.collectAsState()
+        val accountInfo by app.accountInfo.collectAsState()
         var accountVersion by remember { mutableIntStateOf(0) }
         val signedIn = remember(accountVersion) { YouTube.cookie != null }
 
@@ -138,6 +139,7 @@ class MainActivity : ComponentActivity() {
                         phoneState = phoneState,
                         phoneConnected = phoneConnected,
                         signedIn = signedIn,
+                        accountInfo = accountInfo,
                         onLocalPlayer = { navController.navigate(ROUTE_PLAYER_LOCAL) },
                         onPhoneRemote = { navController.navigate(ROUTE_PLAYER_PHONE) },
                         onSearch = { navController.navigate(ROUTE_SEARCH) },

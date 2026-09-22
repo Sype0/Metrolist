@@ -43,7 +43,6 @@
     <string name="allow_speaker">Saat hoparlörüne izin ver</string>
     <string name="allow_speaker_hint">Bir sonraki oynatmada geçerli olur</string>
     <string name="phone_ongoing">Telefondaki çalmayı saat kadranında göster</string>
-    <string name="channel_playback">Oynatma</string>
     <string name="channel_phone_remote">Telefonda çalma</string>
     <string name="radio">Radyo</string>
     <string name="error_no_output">Bluetooth kulaklık bağla ya da Ayarlar\'dan saat hoparlörüne izin ver</string>

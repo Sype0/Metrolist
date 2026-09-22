@@ -5,6 +5,8 @@
 
 package com.metrolist.wear.playback
 
+import com.metrolist.wear.lyrics.LyricLine
+
 import kotlinx.coroutines.flow.StateFlow
 
 /** UI-facing snapshot shared by the watch's own player and the phone remote. */
@@ -71,6 +73,6 @@ interface PlayerSource {
 
     fun skipTo(index: Int)
 
-    /** Raw LRC or plain lyrics for the current item, or null when none were found. */
-    suspend fun lyrics(): String?
+    /** Lyrics for the current item; empty when none were found. */
+    suspend fun lyrics(): List<LyricLine>
 }

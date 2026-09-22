@@ -15,6 +15,7 @@ import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.metrolist.innertube.YouTube
 import com.metrolist.wear.R
+import com.metrolist.wear.lyrics.LyricLine
 import com.metrolist.wear.lyrics.Lyrics
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -182,10 +183,10 @@ class LocalPlayer(
         }
     }
 
-    override suspend fun lyrics(): String? {
+    override suspend fun lyrics(): List<LyricLine> {
         val state = _state.value
-        val id = state.mediaId ?: return null
-        return Lyrics.fetch(id, state.title.orEmpty(), state.artist.orEmpty(), (state.durationMs / 1000).toInt())
+        val id = state.mediaId ?: return emptyList()
+        return Lyrics.fetch(id, state.title.orEmpty(), state.artist.orEmpty(), (state.durationMs / 1000).toInt())?.let(Lyrics::parse).orEmpty()
     }
 
     override fun skipTo(index: Int) =
