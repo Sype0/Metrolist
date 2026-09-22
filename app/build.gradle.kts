@@ -207,7 +207,13 @@ android {
 
 protobuf {
     protoc {
-        artifact = "com.google.protobuf:protoc:${libs.versions.protobuf.get()}"
+        // Hosts without a prebuilt protoc artifact (e.g. Termux on aarch64 Android) can point to a local binary.
+        val localProtoc = providers.gradleProperty("protocPath").orNull
+        if (localProtoc != null) {
+            path = localProtoc
+        } else {
+            artifact = "com.google.protobuf:protoc:${libs.versions.protobuf.get()}"
+        }
     }
     generateProtoTasks {
         all().configureEach {
@@ -290,6 +296,11 @@ dependencies {
     "gmsImplementation"(libs.media3.cast)
     "gmsImplementation"(libs.mediarouter)
     "gmsImplementation"(libs.cast.framework)
+
+    // Wear OS companion bridge - GMS flavor only, the watch app lives in :wear
+    "gmsImplementation"(project(":wear-protocol"))
+    "gmsImplementation"(libs.play.services.wearable)
+    "gmsImplementation"(libs.coroutines.play.services)
 
     implementation(libs.room.runtime)
     implementation(libs.kuromoji.ipadic)

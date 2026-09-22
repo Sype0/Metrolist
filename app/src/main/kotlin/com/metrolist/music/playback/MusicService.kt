@@ -216,6 +216,7 @@ import com.metrolist.music.utils.InnerTubeXPlayer
 import com.metrolist.music.utils.dataStore
 import com.metrolist.music.utils.get
 import com.metrolist.music.utils.reportException
+import com.metrolist.music.wear.WearSync
 import com.metrolist.music.widget.MetrolistWidgetManager
 import com.metrolist.music.widget.MusicWidgetReceiver
 import com.metrolist.music.widget.PlaylistWidgetReceiver
@@ -552,6 +553,8 @@ class MusicService :
     var castConnectionHandler: CastConnectionHandler? = null
         private set
 
+    private var wearSync: WearSync? = null
+
     private val screenStateReceiver =
         object : BroadcastReceiver() {
             override fun onReceive(
@@ -753,6 +756,7 @@ class MusicService :
         playerVolume = MutableStateFlow((startupPrefs!![PlayerVolumeKey] ?: 1f).coerceIn(0f, 1f))
 
         initializeCast()
+        wearSync = WearSync(this).also { it.start() }
 
         // Collecting this flow activates the internal map that updates lyricsProviders in LyricsHelper
         lyricsHelper.preferred.collectLatest(scope) {}
@@ -4267,6 +4271,8 @@ class MusicService :
         }
         audioManager.unregisterAudioDeviceCallback(audioDeviceCallback)
         castConnectionHandler?.release()
+        wearSync?.release()
+        wearSync = null
         if (dataStore.get(PersistentQueueKey, true)) {
             saveQueueToDisk()
             savePlayerStateToDisk()
