@@ -8,11 +8,13 @@ package com.metrolist.wear.phone
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.net.Uri
 import com.google.android.gms.wearable.Asset
 import com.google.android.gms.wearable.CapabilityClient
 import com.google.android.gms.wearable.DataItem
 import com.google.android.gms.wearable.DataMapItem
 import com.google.android.gms.wearable.Node
+import com.google.android.gms.wearable.PutDataRequest
 import com.google.android.gms.wearable.Wearable
 import com.metrolist.wear.playback.PlayerSource
 import com.metrolist.wear.playback.PlayerState
@@ -57,7 +59,7 @@ class PhoneRepository(
         scope.launch {
             refreshConnection()
             runCatching {
-                val items = dataClient.getDataItems(android.net.Uri.parse("wear://*${WearProtocol.PATH_NOW_PLAYING}")).await()
+                val items = dataClient.getDataItems(Uri.Builder().scheme(PutDataRequest.WEAR_URI_SCHEME).path(WearProtocol.PATH_NOW_PLAYING).build()).await()
                 items.forEach { onDataItem(it) }
                 items.release()
             }

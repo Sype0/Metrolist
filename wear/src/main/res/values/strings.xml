@@ -46,4 +46,5 @@
     <string name="channel_playback">Playback</string>
     <string name="channel_phone_remote">Phone playback</string>
     <string name="radio">Radio</string>
+    <string name="error_no_output">Connect Bluetooth headphones or allow the watch speaker in Settings</string>
 </resources>

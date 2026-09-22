@@ -50,9 +50,12 @@ class WearPrefs(context: Context) {
         get() = prefs.getBoolean(KEY_HIGH_QUALITY, false)
         set(value) = prefs.edit { putBoolean(KEY_HIGH_QUALITY, value) }
 
-    /** Wear OS blocks the built-in speaker for media by default; this opts back in. */
+    /**
+     * When off, Media3 holds playback until a Bluetooth output is connected (Wear OS convention).
+     * On by default because watches with a speaker otherwise appear to silently not play.
+     */
     var allowSpeaker: Boolean
-        get() = prefs.getBoolean(KEY_ALLOW_SPEAKER, false)
+        get() = prefs.getBoolean(KEY_ALLOW_SPEAKER, true)
         set(value) = prefs.edit { putBoolean(KEY_ALLOW_SPEAKER, value) }
 
     /** Show the phone's playback as an ongoing activity (watch face / Now Bar chip). */

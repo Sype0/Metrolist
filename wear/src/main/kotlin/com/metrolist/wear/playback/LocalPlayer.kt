@@ -14,6 +14,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.metrolist.innertube.YouTube
+import com.metrolist.wear.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -107,6 +108,14 @@ class LocalPlayer(
                 hasNext = player.hasNextMediaItem(),
                 volume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC),
                 maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC),
+                error =
+                    when {
+                        player.playbackSuppressionReason == Player.PLAYBACK_SUPPRESSION_REASON_UNSUITABLE_AUDIO_OUTPUT ->
+                            context.getString(R.string.error_no_output)
+                        player.playerError != null ->
+                            player.playerError?.let { e -> listOfNotNull(e.errorCodeName, e.cause?.message ?: e.message).joinToString(": ") }
+                        else -> null
+                    },
             )
     }
 

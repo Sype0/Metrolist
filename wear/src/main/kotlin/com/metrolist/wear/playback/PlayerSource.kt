@@ -28,6 +28,8 @@ data class PlayerState(
     val hasNext: Boolean = false,
     val volume: Int = 0,
     val maxVolume: Int = 15,
+    /** Why playback isn't happening, shown on the player screen. */
+    val error: String? = null,
 ) {
     fun positionAt(now: Long): Long {
         if (!isPlaying || positionSampledAt == 0L) return positionMs
