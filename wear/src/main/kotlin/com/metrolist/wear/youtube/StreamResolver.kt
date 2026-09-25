@@ -7,6 +7,9 @@ package com.metrolist.wear.youtube
 
 import android.content.Context
 import android.net.ConnectivityManager
+import androidx.core.net.toUri
+import androidx.media3.common.C
+import androidx.media3.datasource.DataSpec
 import androidx.core.content.edit
 import com.metrolist.innertube.YouTube
 import com.metrolist.innertubex.InnerTubeLogLevel
@@ -30,7 +33,7 @@ import timber.log.Timber
 import kotlin.time.Clock
 
 /**
- * Watch-side counterpart of the phone's `InnerTubeXPlayer`. Wear OS has no WebView, so no
+ * Watch-side counterpart of Metrolist's `InnerTubeXPlayer`. Wear OS has no WebView, so no
  * BotGuard PO token can be minted here; InnerTubeX then only picks clients that work without one.
  */
 object StreamResolver {
@@ -62,12 +65,15 @@ object StreamResolver {
         appContext = context.applicationContext
     }
 
+    /** [forDownload] asks for one unbounded stream, since the downloader reads a song start to end. */
     suspend fun resolve(
         videoId: String,
         highQuality: Boolean,
+        forDownload: Boolean = false,
     ): Stream {
+        val cacheKey = if (forDownload) "$videoId#download" else videoId
         synchronized(cache) {
-            cache[videoId]?.takeIf { it.expiresAtMs > System.currentTimeMillis() + 30_000 }?.let { return it }
+            cache[cacheKey]?.takeIf { it.expiresAtMs > System.currentTimeMillis() + 30_000 }?.let { return it }
         }
         val connectivity = appContext.getSystemService(ConnectivityManager::class.java)
         val quality =
@@ -80,7 +86,7 @@ object StreamResolver {
             requireNotNull(
                 bundle().extractor.extract(
                     videoId = videoId,
-                    hints = ContentHints().withStreamCapabilities(false, false, true),
+                    hints = ContentHints().withStreamCapabilities(allowHls = false, allowSabr = false, allowBoundedRange = !forDownload),
                     excludedClients = emptySet(),
                     audioQuality = quality,
                     clientPlaybackNonce = generateClientPlaybackNonce(),
@@ -100,11 +106,14 @@ object StreamResolver {
             requireBoundedRange = stream.requireBoundedRange,
             rangeChunkSizeBytes = stream.rangeChunkSizeBytes,
             useRangeChunks = stream.useRangeChunks,
-        ).also { synchronized(cache) { cache[videoId] = it } }
+        ).also { synchronized(cache) { cache[cacheKey] = it } }
     }
 
     fun invalidate(videoId: String) {
-        synchronized(cache) { cache.remove(videoId) }
+        synchronized(cache) {
+            cache.remove(videoId)
+            cache.remove("$videoId#download")
+        }
     }
 
     private suspend fun bundle(): Bundle {
@@ -189,4 +198,15 @@ object StreamResolver {
                 InnerTubeLogLevel.ERROR -> Timber.tag(event.tag).e(message)
             }
         }
+}
+
+/** Same bounded-range handling as Metrolist's `withResolvedStream`. */
+fun DataSpec.withStream(stream: StreamResolver.Stream): DataSpec {
+    val resolved =
+        withUri(stream.url.toUri())
+            .withRequestHeaders(httpRequestHeaders + stream.headers)
+    if ((!stream.requireBoundedRange && !stream.useRangeChunks) || stream.rangeChunkSizeBytes <= 0L) return resolved
+    val boundedLength =
+        if (length == C.LENGTH_UNSET.toLong()) stream.rangeChunkSizeBytes else minOf(length, stream.rangeChunkSizeBytes)
+    return resolved.subrange(0, boundedLength)
 }

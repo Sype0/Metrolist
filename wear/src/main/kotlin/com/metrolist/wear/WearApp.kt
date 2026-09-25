@@ -6,12 +6,12 @@
 package com.metrolist.wear
 
 import android.app.Application
+import androidx.media3.common.util.UnstableApi
 import com.metrolist.innertube.YouTube
 import com.metrolist.innertube.models.AccountInfo
 import com.metrolist.innertube.models.YouTubeLocale
-import com.metrolist.wear.phone.PhoneRepository
+import com.metrolist.wear.offline.OfflineStore
 import com.metrolist.wear.youtube.StreamResolver
-import com.metrolist.wear.protocol.AccountSync
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -22,18 +22,25 @@ import kotlinx.coroutines.launch
 import timber.log.Timber
 import java.util.Locale
 
+@UnstableApi
 class WearApp : Application() {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     lateinit var prefs: WearPrefs
         private set
 
-    lateinit var phone: PhoneRepository
+    /** Downloads and the player cache; one instance per process, since a cache locks its directory. */
+    lateinit var offline: OfflineStore
         private set
+
+    private val _account = MutableStateFlow<Account?>(null)
+
+    /** The signed-in account, or null when browsing anonymously. */
+    val account: StateFlow<Account?> = _account.asStateFlow()
 
     private val _accountInfo = MutableStateFlow<AccountInfo?>(null)
 
-    /** Name and avatar of the signed-in YouTube Music account, fetched on the watch after sign-in. */
+    /** Name and avatar of the signed-in YouTube Music account, fetched after sign-in. */
     val accountInfo: StateFlow<AccountInfo?> = _accountInfo.asStateFlow()
 
     override fun onCreate() {
@@ -41,8 +48,9 @@ class WearApp : Application() {
         if (BuildConfig.DEBUG) Timber.plant(Timber.DebugTree())
 
         prefs = WearPrefs(this)
-        phone = PhoneRepository(this, scope)
         StreamResolver.initialize(this)
+        offline = OfflineStore(this, prefs, scope)
+        offline.prune()
 
         val locale = Locale.getDefault()
         YouTube.locale =
@@ -62,16 +70,18 @@ class WearApp : Application() {
         }
     }
 
-    fun applyAccount(account: AccountSync?) {
+    fun applyAccount(account: Account?) {
+        _account.value = account
         YouTube.visitorData = account?.visitorData ?: prefs.visitorData
         YouTube.dataSyncId =
             account?.dataSyncId?.let {
-                // Same normalisation the phone app applies to its stored dataSyncId.
+                // Same normalisation Metrolist applies to its stored dataSyncId.
                 it.takeIf { !it.contains("||") }
                     ?: it.takeIf { it.endsWith("||") }?.substringBefore("||")
                     ?: it.substringAfter("||")
             }
         YouTube.cookie = account?.cookie
+        offline.syncLikedSongs()
         _accountInfo.value = null
         if (account?.cookie != null) {
             scope.launch(Dispatchers.IO) {

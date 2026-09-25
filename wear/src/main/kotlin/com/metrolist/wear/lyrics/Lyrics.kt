@@ -7,7 +7,6 @@ package com.metrolist.wear.lyrics
 
 import com.metrolist.innertube.YouTube
 import com.metrolist.innertube.models.WatchEndpoint
-import com.metrolist.wear.protocol.LyricsLine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -39,24 +38,17 @@ data class LyricLine(
 )
 
 object Lyrics {
-    /** Lines already parsed by the phone app, which knows every word-synced format its providers use. */
-    fun fromPhone(lines: List<LyricsLine>): List<LyricLine> =
-        lines.map { line ->
-            LyricLine(
-                timeMs = line.timeMs,
-                text = line.text,
-                words = line.words?.map { LyricWord(it.text, it.startMs, it.endMs, it.trailingSpace) }?.takeIf { it.isNotEmpty() },
-                background = line.background,
-            )
-        }
-
     private val lineTag = Regex("""\[(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?]""")
 
-    /** Word-level timing (`<00:01.23>`) and speaker tags used by some of the phone app's providers. */
-    private val inlineTags = Regex("""<\d{1,2}:\d{2}(?:[.:]\d{1,3})?>|\{[^}]*\}""")
-    private val metaTag = Regex("""^\[[a-zA-Z]+:.*]$""")
+    /** Enhanced LRC word timing, e.g. `<00:01.23>`. */
+    private val wordTag = Regex("""<(\d{1,2}):(\d{2})(?:[.:](\d{1,3}))?>""")
 
-    /** Parses LRC (including multiple timestamps per line); anything without timestamps becomes plain lines. */
+    /** Speaker tags used by some lyrics providers. */
+    private val speakerTag = Regex("""\{[^}]*\}""")
+    private val metaTag = Regex("""^\[[a-zA-Z]+:.*]$""")
+    private val whitespace = Regex("\\s+")
+
+    /** Parses LRC (including multiple timestamps per line and word timing); anything without timestamps becomes plain lines. */
     fun parse(raw: String): List<LyricLine> {
         val synced = mutableListOf<LyricLine>()
         val plain = mutableListOf<LyricLine>()
@@ -64,31 +56,49 @@ object Lyrics {
             val line = rawLine.trim()
             if (line.isEmpty() || metaTag.matches(line)) return@forEach
             val stamps = lineTag.findAll(line).toList()
-            val text = line.replace(lineTag, "").replace(inlineTags, "").replace(Regex("\\s+"), " ").trim()
+            val body = line.replace(lineTag, "").replace(speakerTag, "")
+            val text = body.replace(wordTag, "").replace(whitespace, " ").trim()
             if (stamps.isEmpty()) {
                 plain += LyricLine(null, text)
             } else {
-                stamps.forEach { match ->
-                    val (min, sec, frac) = match.destructured
-                    val fracMs =
-                        when (frac.length) {
-                            0 -> 0
-                            1 -> frac.toInt() * 100
-                            2 -> frac.toInt() * 10
-                            else -> frac.take(3).toInt()
-                        }
-                    synced += LyricLine(min.toLong() * 60_000 + sec.toLong() * 1_000 + fracMs, text)
-                }
+                val words = words(body)
+                stamps.forEach { synced += LyricLine(it.toMs(), text, words) }
             }
         }
         return if (synced.isNotEmpty()) synced.sortedBy { it.timeMs } else plain
+    }
+
+    private fun words(body: String): List<LyricWord>? {
+        val tags = wordTag.findAll(body).toList()
+        if (tags.isEmpty()) return null
+        return tags
+            .mapIndexedNotNull { i, tag ->
+                val next = tags.getOrNull(i + 1)
+                val segment = body.substring(tag.range.last + 1, next?.range?.first ?: body.length)
+                val word = segment.trim().replace(whitespace, " ")
+                if (word.isEmpty()) return@mapIndexedNotNull null
+                val start = tag.toMs()
+                LyricWord(word, start, next?.toMs() ?: start, trailingSpace = segment.last().isWhitespace())
+            }.takeIf { it.isNotEmpty() }
+    }
+
+    private fun MatchResult.toMs(): Long {
+        val (min, sec, frac) = destructured
+        val fracMs =
+            when (frac.length) {
+                0 -> 0
+                1 -> frac.toInt() * 100
+                2 -> frac.toInt() * 10
+                else -> frac.take(3).toInt()
+            }
+        return min.toLong() * 60_000 + sec.toLong() * 1_000 + fracMs
     }
 
     private val client = OkHttpClient()
     private val json = Json { ignoreUnknownKeys = true }
     private val titleNoise = Regex("""\s*[(\[](official|lyric|audio|video|visualizer|music video|mv|hd|4k)[^)\]]*[)\]]""", RegexOption.IGNORE_CASE)
 
-    /** Watch-side lookup: LrcLib (synced) first, then YouTube Music's plain lyrics. */
+    /** LrcLib (synced) first, then YouTube Music's plain lyrics. */
     suspend fun fetch(
         videoId: String,
         title: String,

@@ -17,7 +17,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -28,9 +27,10 @@ import androidx.wear.compose.material3.AppScaffold
 import androidx.wear.compose.navigation.SwipeDismissableNavHost
 import androidx.wear.compose.navigation.composable
 import androidx.wear.compose.navigation.rememberSwipeDismissableNavController
-import com.metrolist.innertube.YouTube
 import com.metrolist.wear.playback.LocalPlayer
 import com.metrolist.wear.ui.BrowseActions
+import com.metrolist.wear.ui.CachedSongsScreen
+import com.metrolist.wear.ui.DownloadsScreen
 import com.metrolist.wear.ui.HomeScreen
 import com.metrolist.wear.ui.LyricsScreen
 import com.metrolist.wear.ui.MetrolistWearTheme
@@ -40,12 +40,12 @@ import com.metrolist.wear.ui.QueueScreen
 import com.metrolist.wear.ui.QuickPicksScreen
 import com.metrolist.wear.ui.SearchScreen
 import com.metrolist.wear.ui.SettingsScreen
+import com.metrolist.wear.ui.SignInScreen
 import com.metrolist.wear.ui.SongListScreen
 import com.metrolist.wear.ui.VolumeScreen
 import com.metrolist.wear.ui.albumLoader
 import com.metrolist.wear.ui.likedSongsLoader
 import com.metrolist.wear.ui.playlistLoader
-import kotlinx.coroutines.launch
 
 @UnstableApi
 class MainActivity : ComponentActivity() {
@@ -75,7 +75,6 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         localPlayer.connect()
-        WearApp.from(this).scope.launch { WearApp.from(this@MainActivity).phone.refreshConnection() }
     }
 
     override fun onStop() {
@@ -90,8 +89,8 @@ class MainActivity : ComponentActivity() {
 
     private fun routeFor(intent: Intent?) =
         when (intent?.action) {
-            ACTION_OPEN_PLAYER -> ROUTE_PLAYER_LOCAL
-            ACTION_OPEN_PHONE_REMOTE -> ROUTE_PLAYER_PHONE
+            ACTION_OPEN_PLAYER -> ROUTE_PLAYER
+            ACTION_OPEN_DOWNLOADS -> ROUTE_DOWNLOADS
             else -> null
         }
 
@@ -99,11 +98,8 @@ class MainActivity : ComponentActivity() {
     private fun WearNavigation(app: WearApp) {
         val navController = rememberSwipeDismissableNavController()
         val localState by localPlayer.state.collectAsState()
-        val phoneState by app.phone.state.collectAsState()
-        val phoneConnected by app.phone.connected.collectAsState()
+        val account by app.account.collectAsState()
         val accountInfo by app.accountInfo.collectAsState()
-        var accountVersion by remember { mutableIntStateOf(0) }
-        val signedIn = remember(accountVersion) { YouTube.cookie != null }
 
         LaunchedEffect(pendingRoute) {
             pendingRoute?.let {
@@ -116,17 +112,8 @@ class MainActivity : ComponentActivity() {
             BrowseActions(
                 playLocal = { queue ->
                     localPlayer.play(queue)
-                    navController.navigate(ROUTE_PLAYER_LOCAL) { launchSingleTop = true }
+                    navController.navigate(ROUTE_PLAYER) { launchSingleTop = true }
                 },
-                playOnPhone =
-                    if (phoneConnected) {
-                        { song ->
-                            app.phone.playOnPhone(song.id)
-                            navController.navigate(ROUTE_PLAYER_PHONE) { launchSingleTop = true }
-                        }
-                    } else {
-                        null
-                    },
                 openPlaylist = { navController.navigate("playlist/$it") },
                 openAlbum = { navController.navigate("album/$it") },
             )
@@ -135,35 +122,31 @@ class MainActivity : ComponentActivity() {
             SwipeDismissableNavHost(navController = navController, startDestination = ROUTE_HOME) {
                 composable(ROUTE_HOME) {
                     HomeScreen(
-                        localState = localState,
-                        phoneState = phoneState,
-                        phoneConnected = phoneConnected,
-                        signedIn = signedIn,
+                        playerState = localState,
+                        signedIn = account != null,
                         accountInfo = accountInfo,
-                        onLocalPlayer = { navController.navigate(ROUTE_PLAYER_LOCAL) },
-                        onPhoneRemote = { navController.navigate(ROUTE_PLAYER_PHONE) },
+                        onPlayer = { navController.navigate(ROUTE_PLAYER) },
                         onSearch = { navController.navigate(ROUTE_SEARCH) },
                         onQuickPicks = { navController.navigate(ROUTE_QUICK_PICKS) },
                         onLiked = { navController.navigate(ROUTE_LIKED) },
                         onPlaylists = { navController.navigate(ROUTE_PLAYLISTS) },
+                        onDownloads = { navController.navigate(ROUTE_DOWNLOADS) },
+                        onCached = { navController.navigate(ROUTE_CACHED) },
                         onSettings = { navController.navigate(ROUTE_SETTINGS) },
+                        onSignIn = { navController.navigate(ROUTE_SIGN_IN) },
                     )
                 }
-                composable(ROUTE_PLAYER_LOCAL) {
-                    PlayerScreen(localPlayer, isPhone = false, onQueue = { navController.navigate("queue/local") }, onVolume = { navController.navigate("volume/local") }, onLyrics = { navController.navigate("lyrics/local") })
+                composable(ROUTE_PLAYER) {
+                    PlayerScreen(
+                        localPlayer,
+                        onQueue = { navController.navigate(ROUTE_QUEUE) },
+                        onVolume = { navController.navigate(ROUTE_VOLUME) },
+                        onLyrics = { navController.navigate(ROUTE_LYRICS) },
+                    )
                 }
-                composable(ROUTE_PLAYER_PHONE) {
-                    PlayerScreen(app.phone, isPhone = true, onQueue = { navController.navigate("queue/phone") }, onVolume = { navController.navigate("volume/phone") }, onLyrics = { navController.navigate("lyrics/phone") })
-                }
-                composable("queue/{source}") { entry ->
-                    QueueScreen(if (entry.isPhone()) app.phone else localPlayer)
-                }
-                composable("volume/{source}") { entry ->
-                    VolumeScreen(if (entry.isPhone()) app.phone else localPlayer)
-                }
-                composable("lyrics/{source}") { entry ->
-                    LyricsScreen(if (entry.isPhone()) app.phone else localPlayer)
-                }
+                composable(ROUTE_QUEUE) { QueueScreen(localPlayer) }
+                composable(ROUTE_VOLUME) { VolumeScreen(localPlayer) }
+                composable(ROUTE_LYRICS) { LyricsScreen(localPlayer) }
                 composable(ROUTE_SEARCH) {
                     var query by remember { mutableStateOf<String?>(null) }
                     SearchScreen(actions, query) { query = it }
@@ -173,6 +156,8 @@ class MainActivity : ComponentActivity() {
                     SongListScreen(stringResource(R.string.liked_songs), "LM", actions, likedSongsLoader())
                 }
                 composable(ROUTE_PLAYLISTS) { PlaylistsScreen(actions) }
+                composable(ROUTE_DOWNLOADS) { DownloadsScreen(actions) }
+                composable(ROUTE_CACHED) { CachedSongsScreen(actions) }
                 composable("playlist/{id}") { entry ->
                     val id = entry.arguments?.getString("id").orEmpty()
                     SongListScreen(stringResource(R.string.playlists), id, actions, playlistLoader(id))
@@ -181,24 +166,28 @@ class MainActivity : ComponentActivity() {
                     val id = entry.arguments?.getString("id").orEmpty()
                     SongListScreen("", id, actions, albumLoader(id))
                 }
-                composable(ROUTE_SETTINGS) { SettingsScreen(onAccountChanged = { accountVersion++ }) }
+                composable(ROUTE_SETTINGS) { SettingsScreen(localPlayer, onSignIn = { navController.navigate(ROUTE_SIGN_IN) }) }
+                composable(ROUTE_SIGN_IN) { SignInScreen(onDone = { navController.popBackStack() }) }
             }
         }
     }
 
-    private fun androidx.navigation.NavBackStackEntry.isPhone() = arguments?.getString("source") == "phone"
-
     companion object {
         const val ACTION_OPEN_PLAYER = "com.metrolist.wear.OPEN_PLAYER"
-        const val ACTION_OPEN_PHONE_REMOTE = "com.metrolist.wear.OPEN_PHONE_REMOTE"
+        const val ACTION_OPEN_DOWNLOADS = "com.metrolist.wear.OPEN_DOWNLOADS"
 
         private const val ROUTE_HOME = "home"
-        private const val ROUTE_PLAYER_LOCAL = "player/local"
-        private const val ROUTE_PLAYER_PHONE = "player/phone"
+        private const val ROUTE_PLAYER = "player"
+        private const val ROUTE_QUEUE = "queue"
+        private const val ROUTE_VOLUME = "volume"
+        private const val ROUTE_LYRICS = "lyrics"
         private const val ROUTE_SEARCH = "search"
         private const val ROUTE_QUICK_PICKS = "quick_picks"
         private const val ROUTE_LIKED = "liked"
         private const val ROUTE_PLAYLISTS = "playlists"
+        private const val ROUTE_DOWNLOADS = "downloads"
+        private const val ROUTE_CACHED = "cached"
         private const val ROUTE_SETTINGS = "settings"
+        private const val ROUTE_SIGN_IN = "sign_in"
     }
 }

@@ -1,7 +1,6 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
-// The Wearable Data Layer only connects apps that share the application id and signing key,
-// so these mirror :app's values.
+// Kept equal to :app's id and key so existing watch installs keep updating in place.
 val baseApplicationId = "com.metrolist.music"
 val applicationIdOverride = System.getenv("METROLIST_APPLICATION_ID")?.takeIf { it.isNotBlank() }
 val debugKeystorePathOverride = System.getenv("METROLIST_DEBUG_KEYSTORE_PATH")?.takeIf { it.isNotBlank() }
@@ -132,7 +131,6 @@ configurations.configureEach {
 
 dependencies {
     implementation(project(":innertube"))
-    implementation(project(":wear-protocol"))
 
     implementation(libs.activity)
     implementation(libs.compose.runtime)
@@ -143,7 +141,6 @@ dependencies {
     implementation(libs.wear.compose.material3)
     implementation(libs.wear.compose.foundation)
     implementation(libs.wear.compose.navigation)
-    implementation(libs.wear.ongoing)
     implementation(libs.wear.input)
     implementation(libs.wear)
 
@@ -154,12 +151,11 @@ dependencies {
     implementation(libs.coil)
     implementation(libs.coil.network.okhttp)
 
-    implementation(libs.play.services.wearable)
-    implementation(libs.coroutines.play.services)
     implementation(libs.coroutines.guava)
     implementation(libs.guava)
 
     implementation(libs.ktor.client.core)
+    implementation(libs.zxing.core)
     implementation(libs.timber)
 
     coreLibraryDesugaring(libs.desugaring)

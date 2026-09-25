@@ -8,7 +8,7 @@ package com.metrolist.wear.playback
 import com.metrolist.innertube.YouTube
 import com.metrolist.innertube.models.WatchEndpoint
 
-/** What the watch player should play. Mirrors the phone app's queue types in a reduced form. */
+/** What the watch player should play. Mirrors Metrolist's queue types in a reduced form. */
 sealed interface WatchQueue {
     suspend fun initial(): Pair<List<Song>, Int>
 
@@ -23,7 +23,7 @@ sealed interface WatchQueue {
         override suspend fun initial() = songs to startIndex.coerceIn(0, (songs.size - 1).coerceAtLeast(0))
     }
 
-    /** Endless "radio" built from YouTube Music's watch-next feed, like the phone's YouTubeQueue. */
+    /** Endless "radio" built from YouTube Music's watch-next feed, like Metrolist's YouTubeQueue. */
     class Radio(
         private var endpoint: WatchEndpoint,
     ) : WatchQueue {

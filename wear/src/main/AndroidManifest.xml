@@ -5,9 +5,12 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Asks for Wi-Fi while the sign-in page is served; Wear OS otherwise stays on Bluetooth. -->
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
@@ -18,7 +21,7 @@
         android:supportsRtl="true"
         android:theme="@android:style/Theme.DeviceDefault">
 
-        <!-- Plays on its own; the phone is only needed for remote control and account sync. -->
+        <!-- Plays on its own; no phone app is involved. -->
         <meta-data
             android:name="com.google.android.wearable.standalone"
             android:value="true" />
@@ -44,19 +47,19 @@
         </service>
 
         <service
-            android:name=".phone.PhoneListenerService"
-            android:exported="true">
+            android:name=".offline.WearDownloadService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync">
             <intent-filter>
-                <action android:name="com.google.android.gms.wearable.DATA_CHANGED" />
-                <data
-                    android:host="*"
-                    android:path="/metrolist/now_playing"
-                    android:scheme="wear" />
+                <action android:name="androidx.media3.exoplayer.downloadService.action.RESTART" />
+                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </service>
 
+        <!-- Sign-in over adb; DUMP is held only by the shell and the system. -->
         <receiver
-            android:name=".phone.RemoteActionReceiver"
-            android:exported="false" />
+            android:name=".AccountImportReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP" />
     </application>
 </manifest>

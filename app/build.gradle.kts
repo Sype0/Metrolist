@@ -297,11 +297,6 @@ dependencies {
     "gmsImplementation"(libs.mediarouter)
     "gmsImplementation"(libs.cast.framework)
 
-    // Wear OS companion bridge - GMS flavor only, the watch app lives in :wear
-    "gmsImplementation"(project(":wear-protocol"))
-    "gmsImplementation"(libs.play.services.wearable)
-    "gmsImplementation"(libs.coroutines.play.services)
-
     implementation(libs.room.runtime)
     implementation(libs.kuromoji.ipadic)
     implementation(libs.tinypinyin)

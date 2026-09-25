@@ -6,17 +6,15 @@
 package com.metrolist.wear.playback
 
 import com.metrolist.wear.lyrics.LyricLine
-
 import kotlinx.coroutines.flow.StateFlow
 
-/** UI-facing snapshot shared by the watch's own player and the phone remote. */
+/** UI-facing snapshot of the watch player. */
 data class PlayerState(
     val active: Boolean = false,
     val mediaId: String? = null,
     val title: String? = null,
     val artist: String? = null,
-    /** A URL for the watch player, a [android.graphics.Bitmap] for the phone. */
-    val artwork: Any? = null,
+    val artwork: String? = null,
     val isPlaying: Boolean = false,
     val isBuffering: Boolean = false,
     val positionMs: Long = 0,
@@ -51,7 +49,7 @@ data class QueueEntry(
     val isCurrent: Boolean,
 )
 
-/** Everything the player, queue and volume screens can do, regardless of where audio plays. */
+/** Everything the player, queue, volume and lyrics screens can do. */
 interface PlayerSource {
     val state: StateFlow<PlayerState>
 
@@ -68,6 +66,8 @@ interface PlayerSource {
     fun toggleRepeat()
 
     fun adjustVolume(steps: Int)
+
+    fun seekBy(deltaMs: Long)
 
     suspend fun queue(): List<QueueEntry>
 

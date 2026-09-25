@@ -9,12 +9,14 @@ import android.content.ComponentName
 import android.content.Context
 import android.media.AudioManager
 import android.os.Bundle
+import androidx.core.os.bundleOf
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.metrolist.innertube.YouTube
 import com.metrolist.wear.R
+import com.metrolist.wear.WearApp
 import com.metrolist.wear.lyrics.LyricLine
 import com.metrolist.wear.lyrics.Lyrics
 import kotlinx.coroutines.CoroutineScope
@@ -131,20 +133,38 @@ class LocalPlayer(
             }
         }
 
+    override fun seekBy(deltaMs: Long) =
+        withController {
+            val duration = it.duration.takeIf { d -> d > 0 } ?: return@withController
+            it.seekTo((it.currentPosition + deltaMs).coerceIn(0, duration))
+        }
+
+    /** See [PlaybackService.COMMAND_SLEEP_TIMER]. */
+    fun setSleepTimer(minutes: Int) =
+        withController {
+            it.sendCustomCommand(PlaybackService.COMMAND_SLEEP_TIMER, bundleOf(PlaybackService.EXTRA_MINUTES to minutes))
+        }
+
     override fun next() = withController { it.seekToNext() }
 
     override fun previous() = withController { it.seekToPrevious() }
 
     override fun toggleLike() {
-        val id = _state.value.mediaId ?: return
+        val state = _state.value
+        val id = state.mediaId ?: return
         val like = id !in likedIds
         if (like) likedIds += id else likedIds -= id
         refresh()
         scope.launch {
-            withContext(Dispatchers.IO) { YouTube.likeVideo(id, like) }.onFailure {
-                if (like) likedIds -= id else likedIds += id
-                refresh()
-            }
+            withContext(Dispatchers.IO) { YouTube.likeVideo(id, like) }
+                .onSuccess {
+                    if (like) {
+                        WearApp.from(context).offline.onLiked(Song(id, state.title.orEmpty(), state.artist.orEmpty(), thumbnail = state.artwork))
+                    }
+                }.onFailure {
+                    if (like) likedIds -= id else likedIds += id
+                    refresh()
+                }
         }
     }
 

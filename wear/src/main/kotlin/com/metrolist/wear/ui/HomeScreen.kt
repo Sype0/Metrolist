@@ -5,23 +5,20 @@
 
 package com.metrolist.wear.ui
 
-import android.widget.Toast
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
+import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
 import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
 import androidx.wear.compose.material3.EdgeButton
@@ -32,26 +29,29 @@ import androidx.wear.compose.material3.ListHeader
 import androidx.wear.compose.material3.ScreenScaffold
 import androidx.wear.compose.material3.SwitchButton
 import androidx.wear.compose.material3.Text
-import com.metrolist.innertube.YouTube
 import com.metrolist.innertube.models.AccountInfo
 import com.metrolist.wear.R
+import com.metrolist.wear.offline.OfflineStore
+import com.metrolist.wear.playback.LocalPlayer
+import com.metrolist.wear.playback.PlaybackService
 import com.metrolist.wear.playback.PlayerState
-import kotlinx.coroutines.launch
+import com.metrolist.wear.playback.SleepTimer
+import kotlinx.coroutines.delay
 
 @Composable
 fun HomeScreen(
-    localState: PlayerState,
-    phoneState: PlayerState,
-    phoneConnected: Boolean,
+    playerState: PlayerState,
     signedIn: Boolean,
     accountInfo: AccountInfo?,
-    onLocalPlayer: () -> Unit,
-    onPhoneRemote: () -> Unit,
+    onPlayer: () -> Unit,
     onSearch: () -> Unit,
     onQuickPicks: () -> Unit,
     onLiked: () -> Unit,
     onPlaylists: () -> Unit,
+    onDownloads: () -> Unit,
+    onCached: () -> Unit,
     onSettings: () -> Unit,
+    onSignIn: () -> Unit,
 ) {
     val listState = rememberScalingLazyListState()
     ScreenScaffold(
@@ -65,44 +65,41 @@ fun HomeScreen(
         ScalingLazyColumn(state = listState, contentPadding = padding, modifier = Modifier.fillMaxWidth()) {
             item { ListHeader { Text(stringResource(R.string.app_name)) } }
             accountInfo?.let { info ->
-                item {
-                    FilledTonalButton(
-                        onClick = onSettings,
-                        modifier = Modifier.fillMaxWidth(),
-                        icon = { Artwork(info.thumbnailUrl, circle = true) },
-                        secondaryLabel = (info.channelHandle ?: info.email)?.let { { Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis) } },
-                        label = { Text(info.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                    )
-                }
+                item { AccountCard(info, onClick = onSettings) }
             }
-
-            if (localState.active) {
-                item {
-                    NowPlayingButton(stringResource(R.string.on_watch), R.drawable.watch, localState, onLocalPlayer)
-                }
+            if (playerState.active) {
+                item { NowPlayingButton(playerState, onPlayer) }
             }
-            if (phoneConnected && phoneState.active) {
-                item {
-                    NowPlayingButton(stringResource(R.string.on_phone), R.drawable.smartphone, phoneState, onPhoneRemote)
-                }
-            } else if (phoneConnected) {
-                item { NavButton(stringResource(R.string.phone_remote), R.drawable.smartphone, onPhoneRemote) }
-            }
-
             item { NavButton(stringResource(R.string.quick_picks), R.drawable.trending_up, onQuickPicks) }
             if (signedIn) {
                 item { NavButton(stringResource(R.string.liked_songs), R.drawable.favorite, onLiked) }
                 item { NavButton(stringResource(R.string.playlists), R.drawable.library_music, onPlaylists) }
+            } else {
+                item { NavButton(stringResource(R.string.sign_in), R.drawable.account, onSignIn, secondary = stringResource(R.string.sign_in_secondary)) }
             }
+            item { NavButton(stringResource(R.string.downloads), R.drawable.download, onDownloads) }
+            item { NavButton(stringResource(R.string.cached_songs), R.drawable.history, onCached) }
             item { NavButton(stringResource(R.string.settings), R.drawable.settings, onSettings) }
         }
     }
 }
 
 @Composable
+private fun AccountCard(
+    info: AccountInfo,
+    onClick: () -> Unit,
+) {
+    FilledTonalButton(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        icon = { Artwork(info.thumbnailUrl, circle = true) },
+        secondaryLabel = (info.channelHandle ?: info.email)?.let { { Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis) } },
+        label = { Text(info.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+    )
+}
+
+@Composable
 private fun NowPlayingButton(
-    where: String,
-    icon: Int,
     state: PlayerState,
     onClick: () -> Unit,
 ) {
@@ -110,94 +107,124 @@ private fun NowPlayingButton(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         icon = { Artwork(state.artwork) },
-        secondaryLabel = {
-            Icon(painterResource(icon), contentDescription = where, modifier = Modifier.size(14.dp))
-            Text(state.artist ?: where, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 4.dp))
-        },
+        secondaryLabel = { Text(state.artist ?: stringResource(R.string.now_playing), maxLines = 1, overflow = TextOverflow.Ellipsis) },
         label = { Text(state.title ?: stringResource(R.string.now_playing), maxLines = 1, overflow = TextOverflow.Ellipsis) },
     )
 }
 
+@UnstableApi
 @Composable
-fun SettingsScreen(onAccountChanged: () -> Unit) {
+fun SettingsScreen(
+    player: LocalPlayer,
+    onSignIn: () -> Unit,
+) {
     val app = rememberApp()
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val phoneConnected by app.phone.connected.collectAsState()
+    val prefs = app.prefs
+    val account by app.account.collectAsState()
     val accountInfo by app.accountInfo.collectAsState()
-    var account by remember { mutableStateOf(app.prefs.account) }
-    var highQuality by remember { mutableStateOf(app.prefs.highQualityAudio) }
-    var allowSpeaker by remember { mutableStateOf(app.prefs.allowSpeaker) }
-    var phoneOngoing by remember { mutableStateOf(app.prefs.phoneOngoingActivity) }
+    val playerState by player.state.collectAsState()
+    val sleepTimer by PlaybackService.sleepTimer.collectAsState()
+    var repeatMode by remember { mutableStateOf(prefs.repeatMode) }
+    var shuffle by remember { mutableStateOf(prefs.shuffle) }
+    var autoplay by remember { mutableStateOf(prefs.autoplay) }
+    var skipSilence by remember { mutableStateOf(prefs.skipSilence) }
+    var highQuality by remember { mutableStateOf(prefs.highQualityAudio) }
+    var allowSpeaker by remember { mutableStateOf(prefs.allowSpeaker) }
+    var crownSeeks by remember { mutableStateOf(prefs.crownSeeks) }
+    var maxCacheMb by remember { mutableStateOf(prefs.maxCacheMb) }
+    var autoDownloadLiked by remember { mutableStateOf(prefs.autoDownloadLiked) }
+    val cacheUsed by produceState(app.offline.cacheUsedBytes, maxCacheMb) {
+        // Shrinking the limit evicts in the background; pick up the new usage once it has.
+        delay(500)
+        value = app.offline.cacheUsedBytes
+    }
     val listState = rememberScalingLazyListState()
-
-    val syncedText = stringResource(R.string.account_synced)
-    val failedText = stringResource(R.string.account_sync_failed)
 
     ScreenScaffold(scrollState = listState) { padding ->
         ScalingLazyColumn(state = listState, contentPadding = padding, modifier = Modifier.fillMaxWidth()) {
             item { ListHeader { Text(stringResource(R.string.settings)) } }
-            item { ListHeader { Text(stringResource(R.string.account)) } }
-            item {
-                val info = accountInfo
-                if (account != null && info != null) {
-                    FilledTonalButton(
-                        onClick = {},
-                        modifier = Modifier.fillMaxWidth(),
-                        icon = { Artwork(info.thumbnailUrl, circle = true) },
-                        secondaryLabel = (info.channelHandle ?: info.email)?.let { { Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis) } },
-                        label = { Text(info.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                    )
-                } else {
-                    CenteredText(
-                        account?.let { stringResource(R.string.signed_in_as, it.accountName ?: it.accountEmail ?: "YouTube Music") }
-                            ?: stringResource(R.string.not_signed_in),
-                    )
-                }
-            }
+
+            item { ListHeader { Text(stringResource(R.string.playback)) } }
             item {
                 FilledTonalButton(
                     onClick = {
-                        scope.launch {
-                            val synced = app.phone.fetchAccount()?.takeIf { !it.cookie.isNullOrBlank() }
-                            if (synced != null) {
-                                app.prefs.saveAccount(synced)
-                                app.applyAccount(synced)
-                                account = app.prefs.account
-                                onAccountChanged()
+                        repeatMode =
+                            when (repeatMode) {
+                                Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+                                Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+                                else -> Player.REPEAT_MODE_OFF
                             }
-                            Toast.makeText(context, if (synced != null) syncedText else failedText, Toast.LENGTH_SHORT).show()
-                        }
+                        prefs.repeatMode = repeatMode
                     },
-                    enabled = phoneConnected,
                     modifier = Modifier.fillMaxWidth(),
-                    icon = { Icon(painterResource(R.drawable.sync), contentDescription = null) },
-                    secondaryLabel = { Text(stringResource(R.string.use_phone_account_hint), maxLines = 2) },
-                    label = { Text(stringResource(R.string.use_phone_account)) },
+                    icon = {
+                        Icon(
+                            painterResource(
+                                when (repeatMode) {
+                                    Player.REPEAT_MODE_ONE -> R.drawable.repeat_one_on
+                                    Player.REPEAT_MODE_ALL -> R.drawable.repeat_on
+                                    else -> R.drawable.repeat
+                                },
+                            ),
+                            contentDescription = null,
+                        )
+                    },
+                    secondaryLabel = { Text(stringResource(repeatModeLabel(repeatMode))) },
+                    label = { Text(stringResource(R.string.repeat)) },
                 )
             }
-            if (account != null) {
-                item {
-                    FilledTonalButton(
-                        onClick = {
-                            app.prefs.clearAccount()
-                            app.applyAccount(null)
-                            YouTube.cookie = null
-                            account = null
-                            onAccountChanged()
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        icon = { Icon(painterResource(R.drawable.account), contentDescription = null) },
-                        label = { Text(stringResource(R.string.sign_out)) },
-                    )
-                }
+            item {
+                SwitchButton(
+                    checked = shuffle,
+                    onCheckedChange = {
+                        shuffle = it
+                        prefs.shuffle = it
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(stringResource(R.string.shuffle)) },
+                )
             }
+            item {
+                SwitchButton(
+                    checked = autoplay,
+                    onCheckedChange = {
+                        autoplay = it
+                        prefs.autoplay = it
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(stringResource(R.string.autoplay)) },
+                    secondaryLabel = { Text(stringResource(R.string.autoplay_hint), maxLines = 3) },
+                )
+            }
+            item {
+                FilledTonalButton(
+                    onClick = { player.setSleepTimer(nextSleepTimer(sleepTimer)) },
+                    enabled = playerState.active || sleepTimer != null,
+                    modifier = Modifier.fillMaxWidth(),
+                    icon = { Icon(painterResource(R.drawable.bedtime), contentDescription = null) },
+                    secondaryLabel = { Text(sleepTimerLabel(sleepTimer)) },
+                    label = { Text(stringResource(R.string.sleep_timer)) },
+                )
+            }
+            item {
+                SwitchButton(
+                    checked = skipSilence,
+                    onCheckedChange = {
+                        skipSilence = it
+                        prefs.skipSilence = it
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(stringResource(R.string.skip_silence)) },
+                )
+            }
+
+            item { ListHeader { Text(stringResource(R.string.sound_and_controls)) } }
             item {
                 SwitchButton(
                     checked = highQuality,
                     onCheckedChange = {
                         highQuality = it
-                        app.prefs.highQualityAudio = it
+                        prefs.highQualityAudio = it
                     },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text(stringResource(R.string.high_quality_audio)) },
@@ -208,7 +235,7 @@ fun SettingsScreen(onAccountChanged: () -> Unit) {
                     checked = allowSpeaker,
                     onCheckedChange = {
                         allowSpeaker = it
-                        app.prefs.allowSpeaker = it
+                        prefs.allowSpeaker = it
                     },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text(stringResource(R.string.allow_speaker)) },
@@ -217,15 +244,115 @@ fun SettingsScreen(onAccountChanged: () -> Unit) {
             }
             item {
                 SwitchButton(
-                    checked = phoneOngoing,
+                    checked = crownSeeks,
                     onCheckedChange = {
-                        phoneOngoing = it
-                        app.prefs.phoneOngoingActivity = it
+                        crownSeeks = it
+                        prefs.crownSeeks = it
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text(stringResource(R.string.phone_ongoing), maxLines = 3) },
+                    label = { Text(stringResource(R.string.crown_seeks)) },
+                    secondaryLabel = { Text(stringResource(R.string.crown_seeks_hint), maxLines = 3) },
                 )
+            }
+
+            item { ListHeader { Text(stringResource(R.string.storage)) } }
+            item {
+                FilledTonalButton(
+                    onClick = {
+                        val sizes = OfflineStore.CACHE_SIZES_MB
+                        maxCacheMb = sizes.firstOrNull { it > maxCacheMb } ?: sizes.first()
+                        app.offline.setMaxCacheMb(maxCacheMb)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    icon = { Icon(painterResource(R.drawable.storage), contentDescription = null) },
+                    secondaryLabel = {
+                        Text(stringResource(R.string.cache_usage, formatSize(cacheUsed), formatSize(maxCacheMb * OfflineStore.MB)), maxLines = 2)
+                    },
+                    label = { Text(stringResource(R.string.max_cache_size), maxLines = 2) },
+                )
+            }
+            item {
+                SwitchButton(
+                    checked = autoDownloadLiked,
+                    onCheckedChange = {
+                        autoDownloadLiked = it
+                        prefs.autoDownloadLiked = it
+                        if (it) app.offline.syncLikedSongs()
+                    },
+                    enabled = account != null,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text(stringResource(R.string.auto_download_liked), maxLines = 2) },
+                    secondaryLabel = {
+                        Text(stringResource(if (account != null) R.string.auto_download_liked_hint else R.string.not_signed_in), maxLines = 3)
+                    },
+                )
+            }
+
+            item { ListHeader { Text(stringResource(R.string.account)) } }
+            item {
+                val info = accountInfo
+                when {
+                    account != null && info != null -> AccountCard(info, onClick = {})
+                    account != null -> CenteredText(stringResource(R.string.signed_in))
+                    else -> CenteredText(stringResource(R.string.not_signed_in))
+                }
+            }
+            if (account == null) {
+                item {
+                    FilledTonalButton(
+                        onClick = onSignIn,
+                        modifier = Modifier.fillMaxWidth(),
+                        icon = { Icon(painterResource(R.drawable.account), contentDescription = null) },
+                        secondaryLabel = { Text(stringResource(R.string.sign_in_secondary), maxLines = 2) },
+                        label = { Text(stringResource(R.string.sign_in)) },
+                    )
+                }
+            } else {
+                item {
+                    FilledTonalButton(
+                        onClick = {
+                            prefs.clearAccount()
+                            app.applyAccount(null)
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        icon = { Icon(painterResource(R.drawable.account), contentDescription = null) },
+                        label = { Text(stringResource(R.string.sign_out)) },
+                    )
+                }
             }
         }
     }
 }
+
+/** Cycles off → 15 → 30 → 45 → 60 min → end of song → off, continuing from whatever is running. */
+private fun nextSleepTimer(current: SleepTimer?): Int =
+    when (current) {
+        null -> SLEEP_PRESETS_MIN.first()
+        SleepTimer.EndOfSong -> 0
+        is SleepTimer.At -> {
+            val left = minutesLeft(current, System.currentTimeMillis())
+            SLEEP_PRESETS_MIN.firstOrNull { it > left } ?: PlaybackService.SLEEP_END_OF_SONG
+        }
+    }
+
+private fun minutesLeft(
+    timer: SleepTimer.At,
+    now: Long,
+) = ((timer.endsAtMs - now + 59_999) / 60_000).toInt().coerceAtLeast(0)
+
+@Composable
+private fun sleepTimerLabel(timer: SleepTimer?): String {
+    val now by produceState(System.currentTimeMillis(), timer) {
+        while (true) {
+            value = System.currentTimeMillis()
+            delay(15_000)
+        }
+    }
+    return when (timer) {
+        null -> stringResource(R.string.off)
+        SleepTimer.EndOfSong -> stringResource(R.string.sleep_end_of_song)
+        is SleepTimer.At -> stringResource(R.string.sleep_minutes_left, minutesLeft(timer, now))
+    }
+}
+
+private val SLEEP_PRESETS_MIN = listOf(15, 30, 45, 60)

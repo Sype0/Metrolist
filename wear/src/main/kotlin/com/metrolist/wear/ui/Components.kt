@@ -6,7 +6,9 @@
 package com.metrolist.wear.ui
 
 import androidx.annotation.DrawableRes
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -16,6 +18,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
@@ -58,8 +61,10 @@ fun Artwork(
 fun SongButton(
     song: Song,
     onClick: () -> Unit,
-    onLongClick: (() -> Unit)? = null,
     current: Boolean = false,
+    onLongClick: (() -> Unit)? = null,
+    downloaded: Boolean = false,
+    secondary: String = song.artist,
 ) {
     FilledTonalButton(
         onClick = onClick,
@@ -67,9 +72,27 @@ fun SongButton(
         modifier = Modifier.fillMaxWidth(),
         colors = if (current) ButtonDefaults.buttonColors() else ButtonDefaults.filledTonalButtonColors(),
         icon = { Artwork(song.thumbnail) },
-        secondaryLabel = { Text(song.artist, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        secondaryLabel = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (downloaded) {
+                    Icon(
+                        painterResource(R.drawable.download_done),
+                        contentDescription = stringResource(R.string.downloaded),
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(end = 2.dp).size(12.dp),
+                    )
+                }
+                Text(secondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        },
         label = { Text(song.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
     )
+}
+
+/** "45 MB", "1.2 GB"; binary units, like the cache size options. */
+fun formatSize(bytes: Long): String {
+    val mb = bytes / (1024.0 * 1024)
+    return if (mb >= 1024) String.format(java.util.Locale.getDefault(), "%.1f GB", mb / 1024) else "${mb.toInt()} MB"
 }
 
 @Composable

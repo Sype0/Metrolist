@@ -39,6 +39,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.offline.Download
 import androidx.wear.compose.material3.CircularProgressIndicator
 import androidx.wear.compose.material3.FilledIconButton
 import androidx.wear.compose.material3.Icon
@@ -49,20 +52,26 @@ import androidx.wear.compose.material3.ScreenScaffold
 import androidx.wear.compose.material3.Text
 import coil3.compose.AsyncImage
 import com.metrolist.wear.R
+import com.metrolist.wear.playback.PlaybackService
 import com.metrolist.wear.playback.PlayerSource
+import com.metrolist.wear.playback.Song
 import kotlinx.coroutines.delay
 import kotlin.math.abs
 
-/** Now-playing screen used for both the watch player and the phone remote. */
+/** Now-playing screen. */
+@UnstableApi
 @Composable
 fun PlayerScreen(
     source: PlayerSource,
-    isPhone: Boolean,
     onQueue: () -> Unit,
     onVolume: () -> Unit,
     onLyrics: () -> Unit,
 ) {
     val state by source.state.collectAsState()
+    val sleepTimer by PlaybackService.sleepTimer.collectAsState()
+    val app = rememberApp()
+    val downloads by app.offline.downloads.collectAsState()
+    val toggleDownload = rememberDownloadToggle()
     // The indicator reads this state from its draw lambda, so ticking it only redraws the ring.
     val progress = remember { mutableFloatStateOf(0f) }
     LaunchedEffect(state) {
@@ -73,7 +82,8 @@ fun PlayerScreen(
         }
     }
 
-    // Crown/bezel adjusts volume, as on the stock Wear OS media controls.
+    // Crown/bezel adjusts volume, as on the stock Wear OS media controls, or seeks if the user chose that.
+    val crownSeeks = remember { app.prefs.crownSeeks }
     val focusRequester = remember { FocusRequester() }
     var rotaryAccumulator by remember { mutableFloatStateOf(0f) }
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
@@ -86,7 +96,8 @@ fun PlayerScreen(
                     .onRotaryScrollEvent { event ->
                         rotaryAccumulator += event.verticalScrollPixels
                         if (abs(rotaryAccumulator) >= ROTARY_STEP_PX) {
-                            source.adjustVolume(if (rotaryAccumulator > 0) 1 else -1)
+                            val direction = if (rotaryAccumulator > 0) 1 else -1
+                            if (crownSeeks) source.seekBy(direction * SEEK_STEP_MS) else source.adjustVolume(direction)
                             rotaryAccumulator = 0f
                         }
                         true
@@ -123,20 +134,51 @@ fun PlayerScreen(
                 modifier = Modifier.fillMaxSize().padding(horizontal = 22.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        painterResource(if (isPhone) R.drawable.smartphone else R.drawable.watch),
-                        contentDescription = null,
-                        modifier = Modifier.size(12.dp),
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                    Text(
-                        text = stringResource(if (isPhone) R.string.on_phone else R.string.on_watch),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(start = 4.dp),
-                    )
+                    IconButton(onClick = source::toggleShuffle, enabled = state.active, modifier = Modifier.size(TOP_BUTTON)) {
+                        Icon(
+                            painterResource(if (state.shuffle) R.drawable.shuffle_on else R.drawable.shuffle),
+                            contentDescription = stringResource(R.string.shuffle),
+                            tint = if (state.shuffle) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                    if (sleepTimer != null) {
+                        Icon(
+                            painterResource(R.drawable.bedtime),
+                            contentDescription = stringResource(R.string.sleep_timer),
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 2.dp).size(14.dp),
+                        )
+                    }
+                    val downloadState = state.mediaId?.let { downloads[it]?.state }
+                    IconButton(
+                        onClick = {
+                            val id = state.mediaId ?: return@IconButton
+                            toggleDownload(Song(id, state.title.orEmpty(), state.artist.orEmpty(), thumbnail = state.artwork))
+                        },
+                        enabled = state.active,
+                        modifier = Modifier.size(TOP_BUTTON),
+                    ) {
+                        Icon(
+                            painterResource(if (downloadState == Download.STATE_COMPLETED) R.drawable.download_done else R.drawable.download),
+                            contentDescription = stringResource(if (downloadState == null) R.string.download else R.string.remove_download),
+                            tint = if (downloadState != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                            modifier = if (downloadState == Download.STATE_COMPLETED || downloadState == null) Modifier else Modifier.alpha(0.6f),
+                        )
+                    }
+                    IconButton(onClick = source::toggleRepeat, enabled = state.active, modifier = Modifier.size(TOP_BUTTON)) {
+                        Icon(
+                            painterResource(
+                                when (state.repeatMode) {
+                                    Player.REPEAT_MODE_ONE -> R.drawable.repeat_one_on
+                                    Player.REPEAT_MODE_ALL -> R.drawable.repeat_on
+                                    else -> R.drawable.repeat
+                                },
+                            ),
+                            contentDescription = stringResource(repeatModeLabel(state.repeatMode)),
+                            tint = if (state.repeatMode != Player.REPEAT_MODE_OFF) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
                 }
-                Spacer(Modifier.height(2.dp))
                 Text(
                     text = state.title ?: stringResource(R.string.nothing_playing),
                     style = MaterialTheme.typography.titleMedium,
@@ -218,6 +260,15 @@ fun PlayerScreen(
     }
 }
 
+fun repeatModeLabel(mode: Int) =
+    when (mode) {
+        Player.REPEAT_MODE_ONE -> R.string.repeat_one
+        Player.REPEAT_MODE_ALL -> R.string.repeat_all
+        else -> R.string.repeat_off
+    }
+
 private const val ROTARY_STEP_PX = 48f
+private const val SEEK_STEP_MS = 5_000L
+private val TOP_BUTTON = 30.dp
 private const val PROGRESS_TICK_MS = 500L
 private val SMALL_BUTTON = 40.dp

@@ -57,13 +57,12 @@ import kotlinx.coroutines.withContext
 /** Callbacks every browse screen needs. */
 class BrowseActions(
     val playLocal: (WatchQueue) -> Unit,
-    val playOnPhone: ((Song) -> Unit)?,
     val openPlaylist: (String) -> Unit,
     val openAlbum: (String) -> Unit,
 )
 
 @Composable
-private fun ListScreen(
+internal fun ListScreen(
     title: String,
     edgeButton: (@Composable BoxScope.() -> Unit)? = null,
     content: androidx.wear.compose.foundation.lazy.ScalingLazyListScope.() -> Unit,
@@ -86,22 +85,21 @@ private fun ListScreen(
     }
 }
 
-/** Songs play as a radio seeded by the tapped song; long-press sends it to the phone instead. */
-private fun androidx.wear.compose.foundation.lazy.ScalingLazyListScope.songItems(
+/** In a list or album the tapped song plays within that list; elsewhere it seeds a radio. */
+internal fun androidx.wear.compose.foundation.lazy.ScalingLazyListScope.songItems(
     songs: List<Song>,
     actions: BrowseActions,
     asList: Boolean,
 ) {
     items(songs.size) { index ->
         val song = songs[index]
-        SongButton(
+        DownloadableSongButton(
             song = song,
             onClick = {
                 actions.playLocal(
                     if (asList) WatchQueue.Fixed(songs, index) else WatchQueue.Radio(WatchEndpoint(videoId = song.id)),
                 )
             },
-            onLongClick = actions.playOnPhone?.let { { it(song) } },
         )
     }
 }
@@ -114,10 +112,9 @@ private fun androidx.wear.compose.foundation.lazy.ScalingLazyListScope.ytItems(
         when (item) {
             is SongItem -> {
                 val song = item.toSong()
-                SongButton(
+                DownloadableSongButton(
                     song = song,
                     onClick = { actions.playLocal(WatchQueue.Radio(WatchEndpoint(videoId = song.id))) },
-                    onLongClick = actions.playOnPhone?.let { { it(song) } },
                 )
             }
             is PlaylistItem ->
@@ -189,7 +186,10 @@ fun SongListScreen(
                 null
             },
     ) {
-        loadStateItems(load, retry) { songItems(it, actions, asList = true) }
+        loadStateItems(load, retry) {
+            item { DownloadAllButton(it) }
+            songItems(it, actions, asList = true)
+        }
     }
 }
 
@@ -264,7 +264,6 @@ fun SearchScreen(
         } else {
             loadStateItems(load, retry) { songItems(it, actions, asList = false) }
         }
-        if (actions.playOnPhone != null) item { CenteredText(stringResource(R.string.long_press_hint)) }
     }
 }
 
