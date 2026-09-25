@@ -2,9 +2,9 @@
 
 <img src="fastlane/metadata/android/en-US/images/icon.png" alt="Metrolist app icon" width="200" />
 
-# Metrolist
+# Metrolist WearOS
 
-### YouTube Music client for Android
+### YouTube Music client for WearOS
 
 <br/>
 
