@@ -300,10 +300,10 @@ class OfflineStore(
         if (file.exists()) return
         runCatching {
             httpClient.newCall(Request.Builder().url(url).build()).execute().use { response ->
-                if (!response.isSuccessful) return
+                val body = response.body?.takeIf { response.isSuccessful } ?: return
                 artworkDir.mkdirs()
                 val partial = File(artworkDir, "${song.id}.part")
-                partial.outputStream().use { out -> response.body.byteStream().copyTo(out) }
+                partial.outputStream().use { out -> body.byteStream().copyTo(out) }
                 partial.renameTo(file)
             }
         }.onFailure { Timber.w(it, "Artwork for ${song.id} not saved") }
